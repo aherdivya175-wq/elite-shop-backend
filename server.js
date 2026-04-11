@@ -9,6 +9,11 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+/* ✅ ADD THIS (ROOT ROUTE FOR RAZORPAY) */
+app.get("/", (req, res) => {
+  res.send("Elite Shop Website Live ✅");
+});
+
 /* ================= MONGODB ================= */
 const uri = process.env.MONGO_URI;
 
