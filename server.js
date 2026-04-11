@@ -2,6 +2,7 @@ const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
 const nodemailer = require("nodemailer");
+const Razorpay = require("razorpay"); // ✅ ADDED
 
 const app = express();
 
@@ -9,7 +10,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-/* ✅ ADD THIS (ROOT ROUTE FOR RAZORPAY) */
+/* ✅ ROOT ROUTE */
 app.get("/", (req, res) => {
   res.send("Elite Shop Website Live ✅");
 });
@@ -20,6 +21,12 @@ const uri = process.env.MONGO_URI;
 mongoose.connect(uri)
 .then(()=>console.log("MongoDB Connected ✅"))
 .catch(err=>console.log("Mongo Error:", err));
+
+/* ✅ RAZORPAY INSTANCE (ADDED) */
+const razorpay = new Razorpay({
+  key_id: process.env.RAZORPAY_KEY_ID,
+  key_secret: process.env.RAZORPAY_KEY_SECRET
+});
 
 /* ================= EMAIL ================= */
 const transporter = nodemailer.createTransport({
@@ -123,6 +130,28 @@ app.post("/add-product", async (req,res)=>{
   res.json({msg:"Product sent for approval ✅"});
 });
 
+/* ================= ✅ CREATE ORDER (NEW) ================= */
+app.post("/create-order", async (req, res) => {
+  try {
+    const { amount } = req.body;
+
+    const options = {
+      amount: amount * 100,
+      currency: "INR",
+      receipt: "order_" + Date.now()
+    };
+
+    const order = await razorpay.orders.create(options);
+    res.json(order);
+
+  } catch (err) {
+    console.log("Order Error:", err);
+    res.status(500).send("Error creating order");
+  }
+});
+
+/* ================= बाकी code SAME ================= */
+
 /* APPROVE */
 app.post("/approve_product", async (req,res)=>{
   const {sku} = req.body;
@@ -149,101 +178,6 @@ app.post("/reject_product", async (req,res)=>{
 
   await Product.deleteOne({sku});
   res.json({msg:"Rejected"});
-});
-
-/* ================= CART ================= */
-const cartSchema = new mongoose.Schema({
-  userId:String,
-  products:[
-    {
-      name:String,
-      price:Number,
-      image:String,
-      qty:{type:Number,default:1}
-    }
-  ]
-});
-const Cart = mongoose.model("Cart", cartSchema);
-
-/* ADD TO CART */
-app.post("/api/cart/add", async (req,res)=>{
-  const {userId,product} = req.body;
-
-  let cart = await Cart.findOne({userId});
-
-  if(!cart){
-    cart = new Cart({
-      userId,
-      products:[{...product,qty:1}]
-    });
-  }else{
-    const existing = cart.products.find(p=>p.name===product.name);
-
-    if(existing) existing.qty += 1;
-    else cart.products.push({...product,qty:1});
-  }
-
-  await cart.save();
-  res.json({msg:"Added"});
-});
-
-/* GET CART */
-app.get("/api/cart/:userId", async (req,res)=>{
-  const cart = await Cart.findOne({userId:req.params.userId});
-  if(!cart) return res.json({products:[]});
-  res.json(cart);
-});
-
-/* UPDATE CART */
-app.put("/api/cart/:userId", async (req,res)=>{
-  const {products} = req.body;
-
-  let cart = await Cart.findOne({userId:req.params.userId});
-
-  if(!cart){
-    cart = new Cart({userId:req.params.userId,products});
-  }else{
-    cart.products = products;
-  }
-
-  await cart.save();
-  res.json({msg:"Updated"});
-});
-
-/* ================= ADDRESS ================= */
-const addressSchema = new mongoose.Schema({
-  userId:String,
-  fullName:String,
-  email:String,
-  phone:String,
-  address1:String,
-  address2:String,
-  city:String,
-  state:String,
-  pincode:String,
-  instructions:String
-});
-const Address = mongoose.model("Address", addressSchema);
-
-/* SAVE / UPDATE */
-app.post("/api/address", async (req,res)=>{
-  const {userId} = req.body;
-
-  let existing = await Address.findOne({userId});
-
-  if(existing){
-    await Address.updateOne({userId}, req.body);
-    return res.json({msg:"Updated ✅"});
-  }
-
-  await new Address(req.body).save();
-  res.json({msg:"Saved ✅"});
-});
-
-/* GET ADDRESS */
-app.get("/api/address/:userId", async (req,res)=>{
-  const data = await Address.findOne({userId:req.params.userId});
-  res.json(data || {});
 });
 
 /* ================= SERVER ================= */
